@@ -1,0 +1,44 @@
+name: Gerar APK Android
+
+on:
+  push:
+    branches: [ main ] # Gera um APK toda vez que você enviar código para a main
+  workflow_dispatch: # Permite você rodar o robô manualmente com um clique
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Baixar o código
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 📦 Instalar dependências
+        run: npm install
+
+      - name: 🛠️ Compilar o App Web
+        run: npm run build
+
+      - name: ☕ Configurar Java (Para o Android)
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: 🔄 Sincronizar Capacitor
+        run: npx cap sync android
+
+      - name: 🤖 Compilar o APK (Debug)
+        working-directory: ./android
+        run: chmod +x ./gradlew && ./gradlew assembleDebug
+
+      - name: 📤 Salvar o APK gerado
+        uses: actions/upload-artifact@v4
+        with:
+          name: PlayCell-Manager-APK
+          path: android/app/build/outputs/apk/debug/app-debug.apk
