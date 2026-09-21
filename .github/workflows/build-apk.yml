@@ -2,12 +2,12 @@ name: Gerar APK Android
 
 on:
   push:
-    branches: [ main ] # Gera um APK toda vez que você enviar código para a main
-  workflow_dispatch: # Permite você rodar o robô manualmente com um clique
+    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   build-android:
-    runs-on: ubuntu-latest
+    runs-runs-on: ubuntu-latest
 
     steps:
       - name: 📥 Baixar o código
@@ -16,7 +16,7 @@ jobs:
       - name: ⚙️ Configurar Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: 📦 Instalar dependências
         run: npm install
