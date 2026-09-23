@@ -209,12 +209,24 @@ export default function App() {
     // Função auxiliar para tirar foto com a câmara nativa do telemóvel
     const tirarFotoComCamera = async () => {
         try {
+            // Solicita permissão da câmera ao Android antes de abrir
+            const status = await Camera.checkPermissions();
+            if (status.camera !== 'granted') {
+                const req = await Camera.requestPermissions();
+                if (req.camera !== 'granted') {
+                    alert('Permissão de câmera negada. Habilite nas configurações do celular.');
+                    return null;
+                }
+            }
+
+            // Abre a câmera/galeria nativa
             const image = await Camera.getPhoto({
-                quality: 90,
+                quality: 80,
                 allowEditing: false,
                 resultType: CameraResultType.DataUrl,
                 source: CameraSource.Prompt // Pergunta se prefere Câmera ou Galeria
             });
+
             return image.dataUrl;
         } catch (error) {
             console.log("Câmera ou seleção cancelada:", error);
@@ -1046,14 +1058,18 @@ function OrdersTab({ orders, setOrders, usersList, currentUser, saveDocCloud, de
     };
 
     const handleDeviceImageUpload = async (e) => {
-        // Tenta abrir a câmera/galeria nativa do celular
-        const fotoNativa = await tirarFotoComCamera();
-        if (fotoNativa) {
-            setDeviceImage(fotoNativa);
-            return;
+        // 1. Tenta tirar foto pela câmara nativa do dispositivo
+        try {
+            const fotoNativa = await tirarFotoComCamera();
+            if (fotoNativa) {
+                setDeviceImage(fotoNativa);
+                return;
+            }
+        } catch (err) {
+            console.log('Câmera falhou, usando seletor de arquivos', err);
         }
 
-        // Se estiver no PC ou cancelar a câmera, usa o envio de arquivo tradicional
+        // 2. Fallback: Se cancelar a câmara ou estiver no navegador, usa o ficheiro da galeria/PC
         const file = e.target?.files?.[0];
         if (!file) return;
 
