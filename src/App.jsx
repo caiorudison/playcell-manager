@@ -14,7 +14,7 @@ import { initializeApp, getApps, getApp } from 'firebase/app';
 import {
     getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc
 } from 'firebase/firestore';
-
+import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
 const DEFAULT_UTILITY_APPS = [
     { id: '1', name: 'WhatsApp Web', category: 'Comunicação', url: 'https://web.whatsapp.com', icon: '💬', description: 'Atendimento e orçamentos para clientes' },
     { id: '2', name: 'Consulta IMEI (Anatel)', category: 'Consultas', url: 'https://www.consultareclamacoes.anatel.gov.br', icon: '📱', description: 'Verificar restrições e impedimentos de IMEI' },
@@ -183,6 +183,8 @@ export default function App() {
     const [weeklyExtrasHistory, setWeeklyExtrasHistory] = useState([]);
     const [customExtraLists, setCustomExtraLists] = useState([]);
 
+    const [fotoVisualizando, setFotoVisualizando] = useState(null);
+
     const [activeTab, setActiveTab] = useState('orders');
     const [notifications, setNotifications] = useState([]);
     const [showNotifications, setShowNotifications] = useState(false);
@@ -204,6 +206,21 @@ export default function App() {
     });
 
     const [db, setDb] = useState(null);
+    // Função auxiliar para tirar foto com a câmara nativa do telemóvel
+    const tirarFotoComCamera = async () => {
+        try {
+            const image = await Camera.getPhoto({
+                quality: 90,
+                allowEditing: false,
+                resultType: CameraResultType.DataUrl,
+                source: CameraSource.Prompt // Pergunta se prefere Câmera ou Galeria
+            });
+            return image.dataUrl;
+        } catch (error) {
+            console.log("Câmera ou seleção cancelada:", error);
+            return null;
+        }
+    };
     const [isCloudConnected, setIsCloudConnected] = useState(false);
     const [showFirebaseModal, setShowFirebaseModal] = useState(false);
     const [firebaseConfigRaw, setFirebaseConfigRaw] = useState('');
@@ -629,8 +646,35 @@ export default function App() {
     }
 
     if (user && user.role === 'pendente') {
+
+        {/* Modal para Visualizar Foto em Tamanho Grande */ }
+        const renderModalFoto = () => {
+            if (!fotoVisualizando) return null;
+            return (
+                <div
+                    className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm"
+                    onClick={() => setFotoVisualizando(null)}
+                >
+                    <div className="relative max-w-3xl w-full flex flex-col items-center">
+                        <button
+                            onClick={() => setFotoVisualizando(null)}
+                            className="absolute -top-10 right-0 text-white hover:text-gray-300 font-bold text-lg flex items-center gap-1 bg-gray-800/80 px-3 py-1 rounded-full"
+                        >
+                            <X size={20} /> Fechar
+                        </button>
+                        <img
+                            src={fotoVisualizando}
+                            alt="Visualização"
+                            className="max-h-[85vh] max-w-full rounded-lg shadow-2xl object-contain border border-gray-700"
+                        />
+                    </div>
+                </div>
+            );
+        };
+
         return (
             <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
+                {renderModalFoto()}
                 <div className="bg-white p-8 rounded-3xl shadow-2xl w-full max-w-md text-center border border-slate-200 relative overflow-hidden">
                     <div className="w-20 h-20 bg-amber-100 text-amber-600 rounded-3xl flex items-center justify-center mx-auto mb-5 shadow-inner">
                         <Clock className="w-10 h-10 animate-spin" style={{ animationDuration: '6s' }} />
@@ -1001,9 +1045,18 @@ function OrdersTab({ orders, setOrders, usersList, currentUser, saveDocCloud, de
         }
     };
 
-    const handleDeviceImageUpload = (e) => {
-        const file = e.target.files[0];
+    const handleDeviceImageUpload = async (e) => {
+        // Tenta abrir a câmera/galeria nativa do celular
+        const fotoNativa = await tirarFotoComCamera();
+        if (fotoNativa) {
+            setDeviceImage(fotoNativa);
+            return;
+        }
+
+        // Se estiver no PC ou cancelar a câmera, usa o envio de arquivo tradicional
+        const file = e.target?.files?.[0];
         if (!file) return;
+
         const reader = new FileReader();
         reader.onload = (event) => {
             const img = new Image();
