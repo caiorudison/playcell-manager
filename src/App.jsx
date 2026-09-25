@@ -15,7 +15,6 @@ import {
     getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc
 } from 'firebase/firestore';
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
-
 const DEFAULT_UTILITY_APPS = [
     { id: '1', name: 'WhatsApp Web', category: 'Comunicação', url: 'https://web.whatsapp.com', icon: '💬', description: 'Atendimento e orçamentos para clientes' },
     { id: '2', name: 'Consulta IMEI (Anatel)', category: 'Consultas', url: 'https://www.consultareclamacoes.anatel.gov.br', icon: '📱', description: 'Verificar restrições e impedimentos de IMEI' },
@@ -95,35 +94,6 @@ const playAppSound = (type = 'success', soundEnabled = true, volume = 0.5) => {
         }
     } catch (e) {
         console.error('Audio error:', e);
-    }
-};
-
-// =====================================================================
-// NOVO: Função Global de Câmera Capacitor
-// Colocada fora dos componentes para que qualquer tab possa acessá-la
-// =====================================================================
-const tirarFotoComCamera = async () => {
-    try {
-        const status = await Camera.checkPermissions();
-        if (status.camera !== 'granted' && status.camera !== 'prompt') {
-            const req = await Camera.requestPermissions();
-            if (req.camera !== 'granted') {
-                alert('Permissão de câmera negada. Habilite nas configurações do celular.');
-                return null;
-            }
-        }
-
-        const image = await Camera.getPhoto({
-            quality: 80,
-            allowEditing: false,
-            resultType: CameraResultType.DataUrl,
-            source: CameraSource.Prompt // Prompt nativo (Câmera ou Galeria)
-        });
-
-        return image.dataUrl;
-    } catch (error) {
-        console.log("Câmera ou seleção cancelada:", error);
-        return null;
     }
 };
 
@@ -236,6 +206,33 @@ export default function App() {
     });
 
     const [db, setDb] = useState(null);
+    // Função auxiliar para tirar foto com a câmara nativa do telemóvel
+    const tirarFotoComCamera = async () => {
+        try {
+            // Solicita permissão da câmera ao Android antes de abrir
+            const status = await Camera.checkPermissions();
+            if (status.camera !== 'granted') {
+                const req = await Camera.requestPermissions();
+                if (req.camera !== 'granted') {
+                    alert('Permissão de câmera negada. Habilite nas configurações do celular.');
+                    return null;
+                }
+            }
+
+            // Abre a câmera/galeria nativa
+            const image = await Camera.getPhoto({
+                quality: 80,
+                allowEditing: false,
+                resultType: CameraResultType.DataUrl,
+                source: CameraSource.Prompt // Pergunta se prefere Câmera ou Galeria
+            });
+
+            return image.dataUrl;
+        } catch (error) {
+            console.log("Câmera ou seleção cancelada:", error);
+            return null;
+        }
+    };
     const [isCloudConnected, setIsCloudConnected] = useState(false);
     const [showFirebaseModal, setShowFirebaseModal] = useState(false);
     const [firebaseConfigRaw, setFirebaseConfigRaw] = useState('');
@@ -662,6 +659,7 @@ export default function App() {
 
     if (user && user.role === 'pendente') {
 
+        {/* Modal para Visualizar Foto em Tamanho Grande */ }
         const renderModalFoto = () => {
             if (!fotoVisualizando) return null;
             return (
@@ -907,13 +905,13 @@ export default function App() {
                     {activeTab === 'films' && <FilmsTab filmsList={filmsList} setFilmsList={setFilmsList} currentUser={user} saveDocCloud={saveDocCloud} deleteDocCloud={deleteDocCloud} />}
                     {activeTab === 'ordered_parts' && <OrderedPartsTab orderedParts={orderedParts} setOrderedParts={setOrderedParts} usersList={usersList} currentUser={user} saveDocCloud={saveDocCloud} deleteDocCloud={deleteDocCloud} />}
                     {activeTab === 'weekly_extras' && <WeeklyExtrasTab weeklyExtras={weeklyExtras} setWeeklyExtras={setWeeklyExtras} weeklyExtrasConfig={weeklyExtrasConfig} setWeeklyExtrasConfig={setWeeklyExtrasConfig} weeklyExtrasHistory={weeklyExtrasHistory} setWeeklyExtrasHistory={setWeeklyExtrasHistory} customExtraLists={customExtraLists} setCustomExtraLists={setCustomExtraLists} usersList={usersList} currentUser={user} saveDocCloud={saveDocCloud} deleteDocCloud={deleteDocCloud} />}
-                    {activeTab === 'shopping' && <ShoppingTab />}
-                    {activeTab === 'passwords' && <PasswordsTab />}
-                    {activeTab === 'collaborators' && <CollaboratorsTab />}
-                    {activeTab === 'reports' && <SummaryTab />}
-                    {activeTab === 'apps' && <AppsTab />}
-                    {activeTab === 'settings' && <SettingsTab />}
-                    {activeTab === 'team' && <TeamTab />}
+                    {activeTab === 'shopping' && <ShoppingTab shoppingList={shoppingList} setShoppingList={setShoppingList} inventory={inventory} setInventory={setInventory} currentUser={user} saveDocCloud={saveDocCloud} deleteDocCloud={deleteDocCloud} />}
+                    {activeTab === 'passwords' && <PasswordsTab storePasswords={storePasswords} setStorePasswords={setStorePasswords} orders={orders} currentUser={user} saveDocCloud={saveDocCloud} deleteDocCloud={deleteDocCloud} />}
+                    {activeTab === 'collaborators' && <CollaboratorsTab usersList={usersList} orders={orders} orderedParts={orderedParts} pointRules={pointRules} setPointRules={setPointRules} currentUser={user} saveDocCloud={saveDocCloud} />}
+                    {activeTab === 'reports' && <SummaryTab orders={orders} orderedParts={orderedParts} inventory={inventory} closedReports={closedReports} setClosedReports={setClosedReports} currentUser={user} saveDocCloud={saveDocCloud} deleteDocCloud={deleteDocCloud} />}
+                    {activeTab === 'apps' && <AppsTab utilityApps={utilityApps} setUtilityApps={setUtilityApps} currentUser={user} saveDocCloud={saveDocCloud} deleteDocCloud={deleteDocCloud} />}
+                    {activeTab === 'settings' && <SettingsTab currentUser={user} onUpdateUser={handleUpdateUserProfile} appSettings={appSettings} setAppSettings={setAppSettings} setShowFirebaseModal={setShowFirebaseModal} isCloudConnected={isCloudConnected} />}
+                    {activeTab === 'team' && <TeamTab usersList={usersList} setUsersList={setUsersList} currentUser={user} saveDocCloud={saveDocCloud} deleteDocCloud={deleteDocCloud} />}
                 </main>
             </div>
 
@@ -1059,18 +1057,39 @@ function OrdersTab({ orders, setOrders, usersList, currentUser, saveDocCloud, de
         }
     };
 
-    // =======================================================
-    // ATUALIZADO: Uso do botão para chamar a função global
-    // =======================================================
-    const handleDeviceImageUpload = async () => {
+    const handleDeviceImageUpload = async (e) => {
+        // 1. Tenta tirar foto pela câmara nativa do dispositivo
         try {
             const fotoNativa = await tirarFotoComCamera();
             if (fotoNativa) {
                 setDeviceImage(fotoNativa);
+                return;
             }
         } catch (err) {
-            console.log('Erro ao abrir câmera ou galeria', err);
+            console.log('Câmera falhou, usando seletor de arquivos', err);
         }
+
+        // 2. Fallback: Se cancelar a câmara ou estiver no navegador, usa o ficheiro da galeria/PC
+        const file = e.target?.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                const MAX_WIDTH = 500; const MAX_HEIGHT = 500;
+                let width = img.width; let height = img.height;
+                if (width > height) { if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; } }
+                else { if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; } }
+                canvas.width = width; canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+                setDeviceImage(canvas.toDataURL('image/jpeg', 0.8));
+            };
+            img.src = event.target.result;
+        };
+        reader.readAsDataURL(file);
     };
 
     const openModal = (order = null) => {
@@ -1524,18 +1543,14 @@ function OrdersTab({ orders, setOrders, usersList, currentUser, saveDocCloud, de
                                 </div>
                             </div>
 
-                            {/* NOVO: Usando o Botão para Câmera Direta */}
                             <div>
                                 <label className="block text-xs font-bold text-slate-700 mb-1 uppercase">Foto do Aparelho (Opcional)</label>
                                 <div className="flex space-x-2">
                                     <input type="url" value={deviceImage} onChange={(e) => setDeviceImage(e.target.value)} placeholder="http..." className="w-full px-3 py-2 border rounded-xl text-sm" />
-                                    <button
-                                        type="button"
-                                        onClick={handleDeviceImageUpload}
-                                        className="flex items-center justify-center px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 rounded-xl cursor-pointer shrink-0 transition-colors"
-                                    >
-                                        <span className="text-xs font-bold">📷 Câmera</span>
-                                    </button>
+                                    <label className="flex items-center justify-center px-3 py-2 bg-slate-100 hover:bg-slate-200 border rounded-xl cursor-pointer shrink-0">
+                                        <span className="text-xs font-bold">Foto</span>
+                                        <input type="file" accept="image/*" className="hidden" onChange={handleDeviceImageUpload} />
+                                    </label>
                                 </div>
                             </div>
 
@@ -1972,18 +1987,26 @@ function InventoryTab({ inventory, setInventory, shoppingList, setShoppingList, 
         }
     };
 
-    // =======================================================
-    // ATUALIZADO: Uso do botão para chamar a função global
-    // =======================================================
-    const handleImageUpload = async () => {
-        try {
-            const fotoNativa = await tirarFotoComCamera();
-            if (fotoNativa) {
-                setImageUrl(fotoNativa);
-            }
-        } catch (err) {
-            console.log('Erro ao capturar foto', err);
-        }
+    const handleImageUpload = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                const MAX_WIDTH = 400; const MAX_HEIGHT = 400;
+                let width = img.width; let height = img.height;
+                if (width > height) { if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; } }
+                else { if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; } }
+                canvas.width = width; canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+                setImageUrl(canvas.toDataURL('image/jpeg', 0.8));
+            };
+            img.src = event.target.result;
+        };
+        reader.readAsDataURL(file);
     };
 
     const filtered = inventory.filter(item => item.name.toLowerCase().includes(searchTerm.toLowerCase()));
@@ -2090,18 +2113,14 @@ function InventoryTab({ inventory, setInventory, shoppingList, setShoppingList, 
                                 <input type="number" required value={minStock} onChange={(e) => setMinStock(e.target.value)} className="w-full p-2.5 border rounded-xl text-sm" />
                             </div>
 
-                            {/* NOVO: Usando o botão para Câmera do Capacitor */}
                             <div>
                                 <label className="block font-bold uppercase mb-1">Foto (Anexo ou Link)</label>
                                 <div className="flex space-x-2">
                                     <input type="url" value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder="http..." className="w-full p-2.5 border rounded-xl text-xs" />
-                                    <button
-                                        type="button"
-                                        onClick={handleImageUpload}
-                                        className="flex items-center justify-center px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 rounded-xl cursor-pointer shrink-0 transition-colors"
-                                    >
-                                        <span className="text-xs font-bold">📷 Câmera</span>
-                                    </button>
+                                    <label className="flex items-center justify-center px-3 py-2 bg-slate-100 hover:bg-slate-200 border rounded-xl cursor-pointer shrink-0">
+                                        <span className="text-xs font-bold">Arquivo</span>
+                                        <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                                    </label>
                                 </div>
                                 {imageUrl && <img src={imageUrl} alt="Preview" className="h-20 mt-2 rounded-xl object-cover border" />}
                             </div>
@@ -2485,27 +2504,31 @@ function WeeklyExtrasTab({
     customExtraLists, setCustomExtraLists,
     usersList, currentUser, saveDocCloud, deleteDocCloud
 }) {
-    const [subTab, setSubTab] = useState('weekly');
+    const [subTab, setSubTab] = useState('weekly'); // 'weekly', 'custom', 'history'
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
     const [isCreateListModalOpen, setIsCreateListModalOpen] = useState(false);
     const [isAddCustomItemModalOpen, setIsAddCustomItemModalOpen] = useState(false);
     const [selectedCustomListId, setSelectedCustomListId] = useState(null);
 
+    // Form state for Main List Item
     const [description, setDescription] = useState('');
     const [amount, setAmount] = useState('');
     const [performedBy, setPerformedBy] = useState(currentUser.name);
-    const [entryType, setEntryType] = useState('fixed');
+    const [entryType, setEntryType] = useState('fixed'); // 'fixed' or 'percentage'
     const [baseValue, setBaseValue] = useState('');
     const [percentage, setPercentage] = useState('');
 
+    // Form state for Main Config
     const [numEmployees, setNumEmployees] = useState(weeklyExtrasConfig.numEmployees || 3);
     const [payoutDay, setPayoutDay] = useState(weeklyExtrasConfig.payoutDay || 'Sábado');
 
+    // Form state for New Custom List
     const [newListTitle, setNewListTitle] = useState('');
     const [newListNumEmployees, setNewListNumEmployees] = useState('3');
     const [newListDescription, setNewListDescription] = useState('');
 
+    // Form state for Custom List Item
     const [customItemDesc, setCustomItemDesc] = useState('');
     const [customItemAmount, setCustomItemAmount] = useState('');
     const [customItemUser, setCustomItemUser] = useState(currentUser.name);
@@ -2515,6 +2538,7 @@ function WeeklyExtrasTab({
 
     const approvedUsers = usersList.filter(u => u.role === 'admin' || u.role === 'funcionario');
 
+    // SEPARAÇÃO: Caixinha x Comissões
     const sharedExtras = weeklyExtras.filter(item => item.type !== 'percentage');
     const commissionExtras = weeklyExtras.filter(item => item.type === 'percentage');
 
@@ -2524,6 +2548,7 @@ function WeeklyExtrasTab({
     const configuredNumEmployees = Math.max(1, parseInt(weeklyExtrasConfig.numEmployees) || 1);
     const perEmployeeSharedAmount = totalSharedAmount / configuredNumEmployees;
 
+    // Handle adding item to main weekly list
     const handleAddExtra = (e) => {
         e.preventDefault();
 
@@ -2545,7 +2570,7 @@ function WeeklyExtrasTab({
             amount: finalAmount,
             performedBy: performedBy || currentUser.name,
             date: new Date().toISOString(),
-            type: entryType
+            type: entryType // Registrando o tipo para não dividir comissões
         };
 
         setWeeklyExtras(prev => [...prev, newItem]);
@@ -2572,6 +2597,7 @@ function WeeklyExtrasTab({
         setIsConfigModalOpen(false);
     };
 
+    // Close / Pay Main Weekly Pool
     const handleCloseWeeklyPool = () => {
         if (weeklyExtras.length === 0) return alert('Não há extras ou comissões acumulados na lista semanal.');
 
@@ -2605,6 +2631,7 @@ function WeeklyExtrasTab({
         setWeeklyExtras([]);
     };
 
+    // Custom Lists Handlers
     const handleCreateCustomList = (e) => {
         e.preventDefault();
         if (!newListTitle.trim()) return;
@@ -2718,6 +2745,7 @@ function WeeklyExtrasTab({
         setWeeklyExtrasHistory(prev => [historyRecord, ...prev]);
         saveDocCloud('weeklyExtrasHistory', historyRecord.id, historyRecord);
 
+        // Reset list items
         const updatedList = { ...list, items: [] };
         setCustomExtraLists(prev => prev.map(l => l.id === list.id ? updatedList : l));
         saveDocCloud('customExtraLists', list.id, updatedList);
@@ -2759,6 +2787,7 @@ function WeeklyExtrasTab({
                 </button>
             </div>
 
+            {/* SUBTAB 1: MAIN WEEKLY LIST */}
             {subTab === 'weekly' && (
                 <div className="space-y-6">
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -2791,6 +2820,7 @@ function WeeklyExtrasTab({
                         </div>
                     </div>
 
+                    {/* CAIXINHA DE SÁBADO (FIXOS) */}
                     <div>
                         <h5 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 px-1 flex items-center space-x-2">
                             <Layers className="w-4 h-4 text-slate-400" />
@@ -2819,6 +2849,7 @@ function WeeklyExtrasTab({
                         </div>
                     </div>
 
+                    {/* COMISSÕES (PORCENTAGENS) */}
                     <div>
                         <h5 className="text-xs font-bold text-blue-600 uppercase tracking-wider mb-2 px-1 flex items-center space-x-2">
                             <Star className="w-4 h-4 text-blue-500" />
@@ -2849,6 +2880,7 @@ function WeeklyExtrasTab({
                 </div>
             )}
 
+            {/* SUBTAB 2: CUSTOM EXTRA LISTS */}
             {subTab === 'custom' && (
                 <div className="space-y-6">
                     <div className="flex justify-between items-center">
@@ -2960,6 +2992,7 @@ function WeeklyExtrasTab({
                 </div>
             )}
 
+            {/* SUBTAB 3: PAID HISTORY */}
             {subTab === 'history' && (
                 <div className="space-y-4">
                     <h4 className="font-bold text-slate-800 text-sm">Histórico de Listas Pagas e Fechadas</h4>
@@ -3005,6 +3038,7 @@ function WeeklyExtrasTab({
                 </div>
             )}
 
+            {/* MODAL: ADD EXTRA ITEM TO MAIN LIST */}
             {isAddModalOpen && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
                     <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 space-y-4">
@@ -3035,154 +3069,144 @@ function WeeklyExtrasTab({
                                     <input type="number" step="0.01" required={entryType === 'fixed'} value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="30.00" className="w-full p-2.5 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500" />
                                 </div>
                             ) : (
-                                <div className="grid grid-cols-2 gap-2">
+                                <div className="grid grid-cols-2 gap-3">
                                     <div>
-                                        <label className="block font-bold uppercase mb-1">Base (R$)</label>
-                                        <input type="number" step="0.01" required={entryType === 'percentage'} value={baseValue} onChange={(e) => setBaseValue(e.target.value)} placeholder="Ex: 100" className="w-full p-2.5 border rounded-xl" />
+                                        <label className="block font-bold uppercase mb-1">Valor Base (R$)</label>
+                                        <input type="number" step="0.01" required={entryType === 'percentage'} value={baseValue} onChange={(e) => setBaseValue(e.target.value)} placeholder="Ex: 150.00" className="w-full p-2.5 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500" />
                                     </div>
                                     <div>
                                         <label className="block font-bold uppercase mb-1">Porcentagem (%)</label>
-                                        <input type="number" step="0.01" required={entryType === 'percentage'} value={percentage} onChange={(e) => setPercentage(e.target.value)} placeholder="Ex: 10" className="w-full p-2.5 border rounded-xl" />
+                                        <input type="number" step="0.01" required={entryType === 'percentage'} value={percentage} onChange={(e) => setPercentage(e.target.value)} placeholder="Ex: 30" className="w-full p-2.5 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500" />
                                     </div>
                                 </div>
                             )}
 
                             <div>
-                                <label className="block font-bold uppercase mb-1">Realizado Por</label>
-                                <select value={performedBy} onChange={(e) => setPerformedBy(e.target.value)} className="w-full p-2.5 border rounded-xl bg-white outline-none focus:ring-2 focus:ring-blue-500">
+                                <label className="block font-bold uppercase mb-1">Colaborador Que Realizou</label>
+                                <select value={performedBy} onChange={(e) => setPerformedBy(e.target.value)} className="w-full p-2.5 border rounded-xl bg-white font-medium">
                                     {approvedUsers.map(u => <option key={u.id} value={u.name}>{u.name}</option>)}
                                 </select>
                             </div>
+                            <div className="pt-3 flex justify-end space-x-2">
+                                <button type="button" onClick={() => setIsAddModalOpen(false)} className="px-4 py-2 bg-slate-100 rounded-xl font-bold text-slate-700">Cancelar</button>
+                                <button type="submit" className="px-6 py-2 bg-blue-600 text-white rounded-xl font-bold shadow-md hover:bg-blue-700 transition-all">Salvar Lançamento</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
 
-                            <div className="pt-3 flex justify-end space-x-2 border-t">
-                                <button type="button" onClick={() => setIsAddModalOpen(false)} className="px-4 py-2 bg-slate-100 rounded-xl font-bold">Cancelar</button>
-                                <button type="submit" className="px-6 py-2 bg-blue-600 text-white rounded-xl font-bold shadow-md">Salvar Anotação</button>
+            {/* MODAL: CONFIG MAIN LIST */}
+            {isConfigModalOpen && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 space-y-4">
+                        <div className="flex justify-between items-center border-b pb-3">
+                            <h3 className="font-bold text-slate-800">Configurar Divisão dos Extras da Semana</h3>
+                            <button onClick={() => setIsConfigModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
+                        </div>
+                        <form onSubmit={handleSaveConfig} className="space-y-3 text-xs">
+                            <div>
+                                <label className="block font-bold uppercase mb-1">Quantidade de Colaboradores para Dividir</label>
+                                <input type="number" min="1" required value={numEmployees} onChange={(e) => setNumEmployees(e.target.value)} className="w-full p-2.5 border rounded-xl" />
+                                <p className="text-[11px] text-slate-400 mt-1">O valor acumulado na CAIXINHA será dividido igualmente por este número (as comissões não se dividem).</p>
+                            </div>
+                            <div>
+                                <label className="block font-bold uppercase mb-1">Dia do Fechamento / Pagamento</label>
+                                <select value={payoutDay} onChange={(e) => setPayoutDay(e.target.value)} className="w-full p-2.5 border rounded-xl bg-white font-medium">
+                                    {['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado', 'Domingo'].map(d => <option key={d} value={d}>{d}</option>)}
+                                </select>
+                            </div>
+                            <div className="pt-3 flex justify-end space-x-2">
+                                <button type="button" onClick={() => setIsConfigModalOpen(false)} className="px-4 py-2 bg-slate-100 rounded-xl font-bold">Cancelar</button>
+                                <button type="submit" className="px-6 py-2 bg-blue-600 text-white rounded-xl font-bold shadow-md">Salvar Alterações</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* MODAL: CREATE CUSTOM EXTRA LIST */}
+            {isCreateListModalOpen && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 space-y-4">
+                        <div className="flex justify-between items-center border-b pb-3">
+                            <h3 className="font-bold text-slate-800">Criar Nova Lista de Extras</h3>
+                            <button onClick={() => setIsCreateListModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
+                        </div>
+                        <form onSubmit={handleCreateCustomList} className="space-y-3 text-xs">
+                            <div>
+                                <label className="block font-bold uppercase mb-1">Nome da Lista</label>
+                                <input type="text" required value={newListTitle} onChange={(e) => setNewListTitle(e.target.value)} placeholder="Ex: Serviços de Solda, Comissão de Películas..." className="w-full p-2.5 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500" />
+                            </div>
+                            <div>
+                                <label className="block font-bold uppercase mb-1">Quantidade de Colaboradores para Divisão</label>
+                                <input type="number" min="1" required value={newListNumEmployees} onChange={(e) => setNewListNumEmployees(e.target.value)} className="w-full p-2.5 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500" />
+                            </div>
+                            <div>
+                                <label className="block font-bold uppercase mb-1">Descrição / Observações (Opcional)</label>
+                                <input type="text" value={newListDescription} onChange={(e) => setNewListDescription(e.target.value)} placeholder="Ex: Serviços terceirizados ou projetos especiais" className="w-full p-2.5 border rounded-xl" />
+                            </div>
+                            <div className="pt-3 flex justify-end space-x-2">
+                                <button type="button" onClick={() => setIsCreateListModalOpen(false)} className="px-4 py-2 bg-slate-100 rounded-xl font-bold text-slate-700">Cancelar</button>
+                                <button type="submit" className="px-6 py-2 bg-blue-600 text-white rounded-xl font-bold shadow-md hover:bg-blue-700 transition-all">Criar Lista</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* MODAL: ADD ITEM TO CUSTOM LIST */}
+            {isAddCustomItemModalOpen && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 space-y-4">
+                        <div className="flex justify-between items-center border-b pb-3">
+                            <h3 className="font-bold text-slate-800">Anotar Extra na Lista Personalizada</h3>
+                            <button onClick={() => setIsAddCustomItemModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
+                        </div>
+                        <form onSubmit={handleAddCustomItem} className="space-y-3 text-xs">
+                            <div>
+                                <label className="block font-bold uppercase mb-1">Descrição do Serviço</label>
+                                <input type="text" required value={customItemDesc} onChange={(e) => setCustomItemDesc(e.target.value)} placeholder="Ex: Reballing CI de Carga" className="w-full p-2.5 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500" />
+                            </div>
+
+                            <div className="flex space-x-2 bg-slate-50 p-1 rounded-xl border border-slate-200">
+                                <button type="button" onClick={() => setCustomEntryType('fixed')} className={`flex-1 py-1.5 rounded-lg font-bold transition-all ${customEntryType === 'fixed' ? 'bg-blue-600 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}`}>Valor Fixo</button>
+                                <button type="button" onClick={() => setCustomEntryType('percentage')} className={`flex-1 py-1.5 rounded-lg font-bold transition-all ${customEntryType === 'percentage' ? 'bg-blue-600 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}`}>Comissão (%)</button>
+                            </div>
+
+                            {customEntryType === 'fixed' ? (
+                                <div>
+                                    <label className="block font-bold uppercase mb-1">Valor (R$)</label>
+                                    <input type="number" step="0.01" required={customEntryType === 'fixed'} value={customItemAmount} onChange={(e) => setCustomItemAmount(e.target.value)} placeholder="50.00" className="w-full p-2.5 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500" />
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="block font-bold uppercase mb-1">Valor Base (R$)</label>
+                                        <input type="number" step="0.01" required={customEntryType === 'percentage'} value={customBaseValue} onChange={(e) => setCustomBaseValue(e.target.value)} placeholder="Ex: 250.00" className="w-full p-2.5 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500" />
+                                    </div>
+                                    <div>
+                                        <label className="block font-bold uppercase mb-1">Porcentagem (%)</label>
+                                        <input type="number" step="0.01" required={customEntryType === 'percentage'} value={customPercentage} onChange={(e) => setCustomPercentage(e.target.value)} placeholder="Ex: 20" className="w-full p-2.5 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500" />
+                                    </div>
+                                </div>
+                            )}
+
+                            <div>
+                                <label className="block font-bold uppercase mb-1">Colaborador Que Realizou</label>
+                                <select value={customItemUser} onChange={(e) => setCustomItemUser(e.target.value)} className="w-full p-2.5 border rounded-xl bg-white font-medium">
+                                    {approvedUsers.map(u => <option key={u.id} value={u.name}>{u.name}</option>)}
+                                </select>
+                            </div>
+                            <div className="pt-3 flex justify-end space-x-2">
+                                <button type="button" onClick={() => setIsAddCustomItemModalOpen(false)} className="px-4 py-2 bg-slate-100 rounded-xl font-bold text-slate-700">Cancelar</button>
+                                <button type="submit" className="px-6 py-2 bg-blue-600 text-white rounded-xl font-bold shadow-md hover:bg-blue-700 transition-all">Anotar Item</button>
                             </div>
                         </form>
                     </div>
                 </div>
             )}
         </div>
-    );
-}
-
-{/* MODAL: CONFIG MAIN LIST */ }
-{
-    isConfigModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 space-y-4">
-                <div className="flex justify-between items-center border-b pb-3">
-                    <h3 className="font-bold text-slate-800">Configurar Divisão dos Extras da Semana</h3>
-                    <button onClick={() => setIsConfigModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
-                </div>
-                <form onSubmit={handleSaveConfig} className="space-y-3 text-xs">
-                    <div>
-                        <label className="block font-bold uppercase mb-1">Quantidade de Colaboradores para Dividir</label>
-                        <input type="number" min="1" required value={numEmployees} onChange={(e) => setNumEmployees(e.target.value)} className="w-full p-2.5 border rounded-xl" />
-                        <p className="text-[11px] text-slate-400 mt-1">O valor acumulado na CAIXINHA será dividido igualmente por este número (as comissões não se dividem).</p>
-                    </div>
-                    <div>
-                        <label className="block font-bold uppercase mb-1">Dia do Fechamento / Pagamento</label>
-                        <select value={payoutDay} onChange={(e) => setPayoutDay(e.target.value)} className="w-full p-2.5 border rounded-xl bg-white font-medium">
-                            {['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado', 'Domingo'].map(d => <option key={d} value={d}>{d}</option>)}
-                        </select>
-                    </div>
-                    <div className="pt-3 flex justify-end space-x-2">
-                        <button type="button" onClick={() => setIsConfigModalOpen(false)} className="px-4 py-2 bg-slate-100 rounded-xl font-bold">Cancelar</button>
-                        <button type="submit" className="px-6 py-2 bg-blue-600 text-white rounded-xl font-bold shadow-md">Salvar Alterações</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    )
-}
-
-{/* MODAL: CREATE CUSTOM EXTRA LIST */ }
-{
-    isCreateListModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 space-y-4">
-                <div className="flex justify-between items-center border-b pb-3">
-                    <h3 className="font-bold text-slate-800">Criar Nova Lista de Extras</h3>
-                    <button onClick={() => setIsCreateListModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
-                </div>
-                <form onSubmit={handleCreateCustomList} className="space-y-3 text-xs">
-                    <div>
-                        <label className="block font-bold uppercase mb-1">Nome da Lista</label>
-                        <input type="text" required value={newListTitle} onChange={(e) => setNewListTitle(e.target.value)} placeholder="Ex: Serviços de Solda, Comissão de Películas..." className="w-full p-2.5 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500" />
-                    </div>
-                    <div>
-                        <label className="block font-bold uppercase mb-1">Quantidade de Colaboradores para Divisão</label>
-                        <input type="number" min="1" required value={newListNumEmployees} onChange={(e) => setNewListNumEmployees(e.target.value)} className="w-full p-2.5 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500" />
-                    </div>
-                    <div>
-                        <label className="block font-bold uppercase mb-1">Descrição / Observações (Opcional)</label>
-                        <input type="text" value={newListDescription} onChange={(e) => setNewListDescription(e.target.value)} placeholder="Ex: Serviços terceirizados ou projetos especiais" className="w-full p-2.5 border rounded-xl" />
-                    </div>
-                    <div className="pt-3 flex justify-end space-x-2">
-                        <button type="button" onClick={() => setIsCreateListModalOpen(false)} className="px-4 py-2 bg-slate-100 rounded-xl font-bold text-slate-700">Cancelar</button>
-                        <button type="submit" className="px-6 py-2 bg-blue-600 text-white rounded-xl font-bold shadow-md hover:bg-blue-700 transition-all">Criar Lista</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    )
-}
-
-{/* MODAL: ADD ITEM TO CUSTOM LIST */ }
-{
-    isAddCustomItemModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 space-y-4">
-                <div className="flex justify-between items-center border-b pb-3">
-                    <h3 className="font-bold text-slate-800">Anotar Extra na Lista Personalizada</h3>
-                    <button onClick={() => setIsAddCustomItemModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
-                </div>
-                <form onSubmit={handleAddCustomItem} className="space-y-3 text-xs">
-                    <div>
-                        <label className="block font-bold uppercase mb-1">Descrição do Serviço</label>
-                        <input type="text" required value={customItemDesc} onChange={(e) => setCustomItemDesc(e.target.value)} placeholder="Ex: Reballing CI de Carga" className="w-full p-2.5 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500" />
-                    </div>
-
-                    <div className="flex space-x-2 bg-slate-50 p-1 rounded-xl border border-slate-200">
-                        <button type="button" onClick={() => setCustomEntryType('fixed')} className={`flex-1 py-1.5 rounded-lg font-bold transition-all ${customEntryType === 'fixed' ? 'bg-blue-600 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}`}>Valor Fixo</button>
-                        <button type="button" onClick={() => setCustomEntryType('percentage')} className={`flex-1 py-1.5 rounded-lg font-bold transition-all ${customEntryType === 'percentage' ? 'bg-blue-600 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}`}>Comissão (%)</button>
-                    </div>
-
-                    {customEntryType === 'fixed' ? (
-                        <div>
-                            <label className="block font-bold uppercase mb-1">Valor (R$)</label>
-                            <input type="number" step="0.01" required={customEntryType === 'fixed'} value={customItemAmount} onChange={(e) => setCustomItemAmount(e.target.value)} placeholder="50.00" className="w-full p-2.5 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500" />
-                        </div>
-                    ) : (
-                        <div className="grid grid-cols-2 gap-3">
-                            <div>
-                                <label className="block font-bold uppercase mb-1">Valor Base (R$)</label>
-                                <input type="number" step="0.01" required={customEntryType === 'percentage'} value={customBaseValue} onChange={(e) => setCustomBaseValue(e.target.value)} placeholder="Ex: 250.00" className="w-full p-2.5 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500" />
-                            </div>
-                            <div>
-                                <label className="block font-bold uppercase mb-1">Porcentagem (%)</label>
-                                <input type="number" step="0.01" required={customEntryType === 'percentage'} value={customPercentage} onChange={(e) => setCustomPercentage(e.target.value)} placeholder="Ex: 20" className="w-full p-2.5 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500" />
-                            </div>
-                        </div>
-                    )}
-
-                    <div>
-                        <label className="block font-bold uppercase mb-1">Colaborador Que Realizou</label>
-                        <select value={customItemUser} onChange={(e) => setCustomItemUser(e.target.value)} className="w-full p-2.5 border rounded-xl bg-white font-medium">
-                            {approvedUsers.map(u => <option key={u.id} value={u.name}>{u.name}</option>)}
-                        </select>
-                    </div>
-                    <div className="pt-3 flex justify-end space-x-2">
-                        <button type="button" onClick={() => setIsAddCustomItemModalOpen(false)} className="px-4 py-2 bg-slate-100 rounded-xl font-bold text-slate-700">Cancelar</button>
-                        <button type="submit" className="px-6 py-2 bg-blue-600 text-white rounded-xl font-bold shadow-md hover:bg-blue-700 transition-all">Anotar Item</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    )
-}
-        </div >
     );
 }
 
