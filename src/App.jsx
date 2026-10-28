@@ -15,6 +15,7 @@ import {
     getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc
 } from 'firebase/firestore';
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
+import { Capacitor } from '@capacitor/core';
 const DEFAULT_UTILITY_APPS = [
     { id: '1', name: 'WhatsApp Web', category: 'Comunicação', url: 'https://web.whatsapp.com', icon: '💬', description: 'Atendimento e orçamentos para clientes' },
     { id: '2', name: 'Consulta IMEI (Anatel)', category: 'Consultas', url: 'https://www.consultareclamacoes.anatel.gov.br', icon: '📱', description: 'Verificar restrições e impedimentos de IMEI' },
@@ -165,6 +166,87 @@ function PatternInteractivePicker({ value, onChange }) {
     );
 }
 
+// ===== FOTOS: câmera nativa, compressão e botão reutilizável =====
+const salvarLocal = (chave, valor) => {
+    try {
+        localStorage.setItem(chave, JSON.stringify(valor));
+    } catch (e) {
+        console.error('Armazenamento local cheio ou indisponível:', chave, e);
+    }
+};
+
+const comprimirImagem = (dataUrl, max = 800, qualidade = 0.7) =>
+    new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+            let w = img.width, h = img.height;
+            if (w > h) { if (w > max) { h = Math.round(h * max / w); w = max; } }
+            else { if (h > max) { w = Math.round(w * max / h); h = max; } }
+            const canvas = document.createElement('canvas');
+            canvas.width = w; canvas.height = h;
+            canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+            resolve(canvas.toDataURL('image/jpeg', qualidade));
+        };
+        img.onerror = () => resolve(dataUrl);
+        img.src = dataUrl;
+    });
+
+const tirarFotoComCamera = async (max = 800) => {
+    try {
+        const image = await Camera.getPhoto({
+            quality: 70,
+            width: 1000,
+            allowEditing: false,
+            resultType: CameraResultType.DataUrl,
+            source: CameraSource.Prompt,
+            promptLabelHeader: 'Foto',
+            promptLabelPhoto: 'Galeria',
+            promptLabelPicture: 'Câmera',
+            promptLabelCancel: 'Cancelar'
+        });
+        return await comprimirImagem(image.dataUrl, max);
+    } catch (error) {
+        const msg = String((error && error.message) || error);
+        if (!/cancel/i.test(msg)) alert('Não foi possível abrir a câmera: ' + msg);
+        return null;
+    }
+};
+
+function BotaoFoto({ onFoto, label = 'Foto', max = 800 }) {
+    const inputRef = React.useRef(null);
+
+    const handleClick = async () => {
+        if (Capacitor.isNativePlatform()) {
+            const foto = await tirarFotoComCamera(max);
+            if (foto) onFoto(foto);
+        } else if (inputRef.current) {
+            inputRef.current.click();
+        }
+    };
+
+    const handleFile = (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = async (ev) => onFoto(await comprimirImagem(ev.target.result, max));
+        reader.readAsDataURL(file);
+        e.target.value = '';
+    };
+
+    return (
+        <>
+            <button
+                type="button"
+                onClick={handleClick}
+                className="flex items-center justify-center px-3 py-2 bg-slate-100 hover:bg-slate-200 border rounded-xl shrink-0 text-xs font-bold"
+            >
+                {label}
+            </button>
+            <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
+        </>
+    );
+}
+
 export default function App() {
     const [user, setUser] = useState(null);
     const [usersList, setUsersList] = useState([]);
@@ -206,33 +288,6 @@ export default function App() {
     });
 
     const [db, setDb] = useState(null);
-    // Função auxiliar para tirar foto com a câmara nativa do telemóvel
-    const tirarFotoComCamera = async () => {
-        try {
-            // Solicita permissão da câmera ao Android antes de abrir
-            const status = await Camera.checkPermissions();
-            if (status.camera !== 'granted') {
-                const req = await Camera.requestPermissions();
-                if (req.camera !== 'granted') {
-                    alert('Permissão de câmera negada. Habilite nas configurações do celular.');
-                    return null;
-                }
-            }
-
-            // Abre a câmera/galeria nativa
-            const image = await Camera.getPhoto({
-                quality: 80,
-                allowEditing: false,
-                resultType: CameraResultType.DataUrl,
-                source: CameraSource.Prompt // Pergunta se prefere Câmera ou Galeria
-            });
-
-            return image.dataUrl;
-        } catch (error) {
-            console.log("Câmera ou seleção cancelada:", error);
-            return null;
-        }
-    };
     const [isCloudConnected, setIsCloudConnected] = useState(false);
     const [showFirebaseModal, setShowFirebaseModal] = useState(false);
     const [firebaseConfigRaw, setFirebaseConfigRaw] = useState('');
@@ -312,7 +367,7 @@ export default function App() {
                 const currentInDb = docs.find(u => u.id === user.id || u.email?.toLowerCase() === user.email?.toLowerCase());
                 if (currentInDb) {
                     setUser(currentInDb);
-                    localStorage.setItem('playcell_user', JSON.stringify(currentInDb));
+                    salvarLocal('playcell_user', currentInDb);
                 }
             }
         }));
@@ -358,21 +413,21 @@ export default function App() {
         return () => unsubs.forEach(unsub => unsub());
     }, [db, user?.id]);
 
-    useEffect(() => { if (!db) localStorage.setItem('techApp_usersList', JSON.stringify(usersList)); }, [usersList, db]);
-    useEffect(() => { if (!db) localStorage.setItem('techApp_inventory', JSON.stringify(inventory)); }, [inventory, db]);
-    useEffect(() => { if (!db) localStorage.setItem('techApp_orders', JSON.stringify(orders)); }, [orders, db]);
-    useEffect(() => { if (!db) localStorage.setItem('techApp_shopping', JSON.stringify(shoppingList)); }, [shoppingList, db]);
-    useEffect(() => { if (!db) localStorage.setItem('techApp_orderedParts', JSON.stringify(orderedParts)); }, [orderedParts, db]);
-    useEffect(() => { if (!db) localStorage.setItem('techApp_closedReports', JSON.stringify(closedReports)); }, [closedReports, db]);
-    useEffect(() => { if (!db) localStorage.setItem('techApp_utilityApps', JSON.stringify(utilityApps)); }, [utilityApps, db]);
-    useEffect(() => { if (!db) localStorage.setItem('techApp_storePasswords', JSON.stringify(storePasswords)); }, [storePasswords, db]);
-    useEffect(() => { if (!db) localStorage.setItem('techApp_pointRules', JSON.stringify(pointRules)); }, [pointRules, db]);
-    useEffect(() => { if (!db) localStorage.setItem('techApp_filmsList', JSON.stringify(filmsList)); }, [filmsList, db]);
-    useEffect(() => { if (!db) localStorage.setItem('techApp_weeklyExtras', JSON.stringify(weeklyExtras)); }, [weeklyExtras, db]);
-    useEffect(() => { if (!db) localStorage.setItem('techApp_weeklyExtrasConfig', JSON.stringify(weeklyExtrasConfig)); }, [weeklyExtrasConfig, db]);
-    useEffect(() => { if (!db) localStorage.setItem('techApp_weeklyExtrasHistory', JSON.stringify(weeklyExtrasHistory)); }, [weeklyExtrasHistory, db]);
-    useEffect(() => { if (!db) localStorage.setItem('techApp_customExtraLists', JSON.stringify(customExtraLists)); }, [customExtraLists, db]);
-    useEffect(() => { localStorage.setItem('playcell_appSettings', JSON.stringify(appSettings)); }, [appSettings]);
+    useEffect(() => { if (!db) salvarLocal('techApp_usersList', usersList); }, [usersList, db]);
+    useEffect(() => { if (!db) salvarLocal('techApp_inventory', inventory); }, [inventory, db]);
+    useEffect(() => { if (!db) salvarLocal('techApp_orders', orders); }, [orders, db]);
+    useEffect(() => { if (!db) salvarLocal('techApp_shopping', shoppingList); }, [shoppingList, db]);
+    useEffect(() => { if (!db) salvarLocal('techApp_orderedParts', orderedParts); }, [orderedParts, db]);
+    useEffect(() => { if (!db) salvarLocal('techApp_closedReports', closedReports); }, [closedReports, db]);
+    useEffect(() => { if (!db) salvarLocal('techApp_utilityApps', utilityApps); }, [utilityApps, db]);
+    useEffect(() => { if (!db) salvarLocal('techApp_storePasswords', storePasswords); }, [storePasswords, db]);
+    useEffect(() => { if (!db) salvarLocal('techApp_pointRules', pointRules); }, [pointRules, db]);
+    useEffect(() => { if (!db) salvarLocal('techApp_filmsList', filmsList); }, [filmsList, db]);
+    useEffect(() => { if (!db) salvarLocal('techApp_weeklyExtras', weeklyExtras); }, [weeklyExtras, db]);
+    useEffect(() => { if (!db) salvarLocal('techApp_weeklyExtrasConfig', weeklyExtrasConfig); }, [weeklyExtrasConfig, db]);
+    useEffect(() => { if (!db) salvarLocal('techApp_weeklyExtrasHistory', weeklyExtrasHistory); }, [weeklyExtrasHistory, db]);
+    useEffect(() => { if (!db) salvarLocal('techApp_customExtraLists', customExtraLists); }, [customExtraLists, db]);
+    useEffect(() => { salvarLocal('playcell_appSettings', appSettings); }, [appSettings]);
 
     const saveDocCloud = async (colName, id, data) => {
         if (db) {
@@ -530,7 +585,7 @@ export default function App() {
         }
 
         setUser(existingUser);
-        localStorage.setItem('playcell_user', JSON.stringify(existingUser));
+        salvarLocal('playcell_user', existingUser);
         playAppSound('success', appSettings.soundEnabled, appSettings.soundVolume);
     };
 
@@ -541,7 +596,7 @@ export default function App() {
 
     const handleUpdateUserProfile = (updatedUserData) => {
         setUser(updatedUserData);
-        localStorage.setItem('playcell_user', JSON.stringify(updatedUserData));
+        salvarLocal('playcell_user', updatedUserData);
         setUsersList(prev => prev.map(u => u.id === updatedUserData.id ? updatedUserData : u));
         saveDocCloud('users', updatedUserData.id, updatedUserData);
         playAppSound('success', appSettings.soundEnabled, appSettings.soundVolume);
@@ -573,7 +628,7 @@ export default function App() {
                 return;
             }
 
-            localStorage.setItem('playcell_firebaseConfig', JSON.stringify(configObj));
+            salvarLocal('playcell_firebaseConfig', configObj);
             const app = getApps().length === 0 ? initializeApp(configObj) : getApp();
             const firestore = getFirestore(app);
             setDb(firestore);
@@ -659,34 +714,8 @@ export default function App() {
 
     if (user && user.role === 'pendente') {
 
-        {/* Modal para Visualizar Foto em Tamanho Grande */ }
-        const renderModalFoto = () => {
-            if (!fotoVisualizando) return null;
-            return (
-                <div
-                    className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm"
-                    onClick={() => setFotoVisualizando(null)}
-                >
-                    <div className="relative max-w-3xl w-full flex flex-col items-center">
-                        <button
-                            onClick={() => setFotoVisualizando(null)}
-                            className="absolute -top-10 right-0 text-white hover:text-gray-300 font-bold text-lg flex items-center gap-1 bg-gray-800/80 px-3 py-1 rounded-full"
-                        >
-                            <X size={20} /> Fechar
-                        </button>
-                        <img
-                            src={fotoVisualizando}
-                            alt="Visualização"
-                            className="max-h-[85vh] max-w-full rounded-lg shadow-2xl object-contain border border-gray-700"
-                        />
-                    </div>
-                </div>
-            );
-        };
-
         return (
             <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
-                {renderModalFoto()}
                 <div className="bg-white p-8 rounded-3xl shadow-2xl w-full max-w-md text-center border border-slate-200 relative overflow-hidden">
                     <div className="w-20 h-20 bg-amber-100 text-amber-600 rounded-3xl flex items-center justify-center mx-auto mb-5 shadow-inner">
                         <Clock className="w-10 h-10 animate-spin" style={{ animationDuration: '6s' }} />
@@ -900,8 +929,8 @@ export default function App() {
                 </header>
 
                 <main className="flex-1 overflow-y-auto p-4 md:p-6 bg-slate-50/50">
-                    {activeTab === 'orders' && <OrdersTab orders={orders} setOrders={setOrders} usersList={usersList} currentUser={user} saveDocCloud={saveDocCloud} deleteDocCloud={deleteDocCloud} appSettings={appSettings} />}
-                    {activeTab === 'inventory' && <InventoryTab inventory={inventory} setInventory={setInventory} shoppingList={shoppingList} setShoppingList={setShoppingList} currentUser={user} saveDocCloud={saveDocCloud} deleteDocCloud={deleteDocCloud} />}
+                    {activeTab === 'orders' && <OrdersTab orders={orders} setOrders={setOrders} usersList={usersList} currentUser={user} saveDocCloud={saveDocCloud} deleteDocCloud={deleteDocCloud} appSettings={appSettings} onViewPhoto={setFotoVisualizando} />}
+                    {activeTab === 'inventory' && <InventoryTab inventory={inventory} setInventory={setInventory} shoppingList={shoppingList} setShoppingList={setShoppingList} currentUser={user} saveDocCloud={saveDocCloud} deleteDocCloud={deleteDocCloud} onViewPhoto={setFotoVisualizando} />}
                     {activeTab === 'films' && <FilmsTab filmsList={filmsList} setFilmsList={setFilmsList} currentUser={user} saveDocCloud={saveDocCloud} deleteDocCloud={deleteDocCloud} />}
                     {activeTab === 'ordered_parts' && <OrderedPartsTab orderedParts={orderedParts} setOrderedParts={setOrderedParts} usersList={usersList} currentUser={user} saveDocCloud={saveDocCloud} deleteDocCloud={deleteDocCloud} />}
                     {activeTab === 'weekly_extras' && <WeeklyExtrasTab weeklyExtras={weeklyExtras} setWeeklyExtras={setWeeklyExtras} weeklyExtrasConfig={weeklyExtrasConfig} setWeeklyExtrasConfig={setWeeklyExtrasConfig} weeklyExtrasHistory={weeklyExtrasHistory} setWeeklyExtrasHistory={setWeeklyExtrasHistory} customExtraLists={customExtraLists} setCustomExtraLists={setCustomExtraLists} usersList={usersList} currentUser={user} saveDocCloud={saveDocCloud} deleteDocCloud={deleteDocCloud} />}
@@ -914,6 +943,27 @@ export default function App() {
                     {activeTab === 'team' && <TeamTab usersList={usersList} setUsersList={setUsersList} currentUser={user} saveDocCloud={saveDocCloud} deleteDocCloud={deleteDocCloud} />}
                 </main>
             </div>
+
+            {fotoVisualizando && (
+                <div
+                    className="fixed inset-0 z-[60] bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm"
+                    onClick={() => setFotoVisualizando(null)}
+                >
+                    <div className="relative max-w-3xl w-full flex flex-col items-center">
+                        <button
+                            onClick={() => setFotoVisualizando(null)}
+                            className="absolute -top-10 right-0 text-white hover:text-gray-300 font-bold text-lg flex items-center gap-1 bg-gray-800/80 px-3 py-1 rounded-full"
+                        >
+                            <X size={20} /> Fechar
+                        </button>
+                        <img
+                            src={fotoVisualizando}
+                            alt="Visualização"
+                            className="max-h-[85vh] max-w-full rounded-lg shadow-2xl object-contain border border-gray-700"
+                        />
+                    </div>
+                </div>
+            )}
 
             {showFirebaseModal && (
                 <FirebaseModal
@@ -1003,7 +1053,7 @@ function FirebaseModal({ show, onClose, firebaseConfigRaw, setFirebaseConfigRaw,
     );
 }
 
-function OrdersTab({ orders, setOrders, usersList, currentUser, saveDocCloud, deleteDocCloud, appSettings }) {
+function OrdersTab({ orders, setOrders, usersList, currentUser, saveDocCloud, deleteDocCloud, appSettings, onViewPhoto }) {
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState('todos');
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -1055,41 +1105,6 @@ function OrdersTab({ orders, setOrders, usersList, currentUser, saveDocCloud, de
         if (!checked) {
             setLeftSimCard(false);
         }
-    };
-
-    const handleDeviceImageUpload = async (e) => {
-        // 1. Tenta tirar foto pela câmara nativa do dispositivo
-        try {
-            const fotoNativa = await tirarFotoComCamera();
-            if (fotoNativa) {
-                setDeviceImage(fotoNativa);
-                return;
-            }
-        } catch (err) {
-            console.log('Câmera falhou, usando seletor de arquivos', err);
-        }
-
-        // 2. Fallback: Se cancelar a câmara ou estiver no navegador, usa o ficheiro da galeria/PC
-        const file = e.target?.files?.[0];
-        if (!file) return;
-
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            const img = new Image();
-            img.onload = () => {
-                const canvas = document.createElement('canvas');
-                const MAX_WIDTH = 500; const MAX_HEIGHT = 500;
-                let width = img.width; let height = img.height;
-                if (width > height) { if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; } }
-                else { if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; } }
-                canvas.width = width; canvas.height = height;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, width, height);
-                setDeviceImage(canvas.toDataURL('image/jpeg', 0.8));
-            };
-            img.src = event.target.result;
-        };
-        reader.readAsDataURL(file);
     };
 
     const openModal = (order = null) => {
@@ -1356,7 +1371,7 @@ function OrdersTab({ orders, setOrders, usersList, currentUser, saveDocCloud, de
 
                                     {order.deviceImage && (
                                         <div className="mb-3 h-28 w-full bg-slate-100 rounded-xl overflow-hidden border border-slate-200">
-                                            <img src={order.deviceImage} alt={devName} className="w-full h-full object-cover" />
+                                            <img src={order.deviceImage} alt={devName} onClick={() => onViewPhoto && onViewPhoto(order.deviceImage)} className="w-full h-full object-cover cursor-pointer" />
                                         </div>
                                     )}
 
@@ -1546,17 +1561,14 @@ function OrdersTab({ orders, setOrders, usersList, currentUser, saveDocCloud, de
                             <div>
                                 <label className="block text-xs font-bold text-slate-700 mb-1 uppercase">Foto do Aparelho (Opcional)</label>
                                 <div className="flex space-x-2">
-                                    <input type="url" value={deviceImage} onChange={(e) => setDeviceImage(e.target.value)} placeholder="http..." className="w-full px-3 py-2 border rounded-xl text-sm" />
-                                    <label className="flex items-center justify-center px-3 py-2 bg-slate-100 hover:bg-slate-200 border rounded-xl cursor-pointer shrink-0">
-                                        <span className="text-xs font-bold">Foto</span>
-                                        <input type="file" accept="image/*" className="hidden" onChange={handleDeviceImageUpload} />
-                                    </label>
+                                    <input type="url" value={deviceImage && deviceImage.startsWith('data:') ? '' : deviceImage} onChange={(e) => setDeviceImage(e.target.value)} placeholder={deviceImage && deviceImage.startsWith('data:') ? 'Foto anexada' : 'http...'} className="w-full px-3 py-2 border rounded-xl text-sm" />
+                                    <BotaoFoto onFoto={setDeviceImage} />
                                 </div>
                             </div>
 
                             {deviceImage && (
                                 <div className="relative w-20 h-20 rounded-xl overflow-hidden border border-slate-200 group">
-                                    <img src={deviceImage} alt="Aparelho" className="w-full h-full object-cover" />
+                                    <img src={deviceImage} alt="Aparelho" onClick={() => onViewPhoto && onViewPhoto(deviceImage)} className="w-full h-full object-cover cursor-pointer" />
                                     <button type="button" onClick={() => setDeviceImage('')} className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 shadow hover:bg-red-600">
                                         <X className="w-3 h-3" />
                                     </button>
@@ -1900,7 +1912,7 @@ function OrdersTab({ orders, setOrders, usersList, currentUser, saveDocCloud, de
     );
 }
 
-function InventoryTab({ inventory, setInventory, shoppingList, setShoppingList, currentUser, saveDocCloud, deleteDocCloud }) {
+function InventoryTab({ inventory, setInventory, shoppingList, setShoppingList, currentUser, saveDocCloud, deleteDocCloud, onViewPhoto }) {
     const [searchTerm, setSearchTerm] = useState('');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingItem, setEditingItem] = useState(null);
@@ -1987,28 +1999,6 @@ function InventoryTab({ inventory, setInventory, shoppingList, setShoppingList, 
         }
     };
 
-    const handleImageUpload = (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            const img = new Image();
-            img.onload = () => {
-                const canvas = document.createElement('canvas');
-                const MAX_WIDTH = 400; const MAX_HEIGHT = 400;
-                let width = img.width; let height = img.height;
-                if (width > height) { if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; } }
-                else { if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; } }
-                canvas.width = width; canvas.height = height;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, width, height);
-                setImageUrl(canvas.toDataURL('image/jpeg', 0.8));
-            };
-            img.src = event.target.result;
-        };
-        reader.readAsDataURL(file);
-    };
-
     const filtered = inventory.filter(item => item.name.toLowerCase().includes(searchTerm.toLowerCase()));
 
     return (
@@ -2041,10 +2031,11 @@ function InventoryTab({ inventory, setInventory, shoppingList, setShoppingList, 
                                 ) : (
                                     <div className="w-full h-full flex items-center justify-center text-slate-300"><ImageIcon className="w-10 h-10" /></div>
                                 )}
-                                <div className="absolute inset-0 bg-black/40 flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <div onClick={(e) => { if (e.target === e.currentTarget && item.imageUrl && onViewPhoto) onViewPhoto(item.imageUrl); }} className="absolute inset-0 bg-black/40 flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                     <button onClick={() => openModal(item)} className="p-2 bg-white rounded-full hover:bg-blue-50 text-blue-600 shadow-md"><Edit2 className="w-4 h-4" /></button>
                                     <button onClick={() => deleteItem(item.id)} className="p-2 bg-white rounded-full hover:bg-red-50 text-red-600 shadow-md"><Trash2 className="w-4 h-4" /></button>
                                     <button onClick={() => addToShoppingList(item)} className="p-2 bg-white rounded-full hover:bg-emerald-50 text-emerald-600 shadow-md" title="Adicionar à Lista de Compras"><ShoppingCart className="w-4 h-4" /></button>
+                                    {item.imageUrl && <button onClick={() => onViewPhoto && onViewPhoto(item.imageUrl)} className="p-2 bg-white rounded-full hover:bg-slate-50 text-slate-700 shadow-md" title="Ver foto"><Eye className="w-4 h-4" /></button>}
                                 </div>
                             </div>
 
@@ -2116,13 +2107,10 @@ function InventoryTab({ inventory, setInventory, shoppingList, setShoppingList, 
                             <div>
                                 <label className="block font-bold uppercase mb-1">Foto (Anexo ou Link)</label>
                                 <div className="flex space-x-2">
-                                    <input type="url" value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder="http..." className="w-full p-2.5 border rounded-xl text-xs" />
-                                    <label className="flex items-center justify-center px-3 py-2 bg-slate-100 hover:bg-slate-200 border rounded-xl cursor-pointer shrink-0">
-                                        <span className="text-xs font-bold">Arquivo</span>
-                                        <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
-                                    </label>
+                                    <input type="url" value={imageUrl && imageUrl.startsWith('data:') ? '' : imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder={imageUrl && imageUrl.startsWith('data:') ? 'Foto anexada' : 'http...'} className="w-full p-2.5 border rounded-xl text-xs" />
+                                    <BotaoFoto onFoto={setImageUrl} max={500} />
                                 </div>
-                                {imageUrl && <img src={imageUrl} alt="Preview" className="h-20 mt-2 rounded-xl object-cover border" />}
+                                {imageUrl && <img src={imageUrl} alt="Preview" onClick={() => onViewPhoto && onViewPhoto(imageUrl)} className="h-20 mt-2 rounded-xl object-cover border cursor-pointer" />}
                             </div>
 
                             <div className="pt-4 flex justify-end space-x-2">
