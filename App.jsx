@@ -668,7 +668,7 @@ export default function App() {
                         <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-lg shadow-blue-500/30 text-white">
                             <Wrench className="w-8 h-8" />
                         </div>
-                        <h1 className="text-2xl font-black text-slate-800 tracking-tight">PlayCell Manager</h1>
+                        <h1 className="text-2xl font-black text-slate-800 tracking-tight">PlayCell App</h1>
                         <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mt-1">Gestão Técnica & Balcão</p>
                     </div>
 
@@ -769,8 +769,8 @@ export default function App() {
                     <div className="flex items-center space-x-3">
                         <div className="bg-blue-600 p-2.5 rounded-xl shadow-md text-white"><Wrench className="w-5 h-5" /></div>
                         <div>
-                            <span className="font-black text-lg text-white tracking-tight block leading-none">PlayCell</span>
-                            <span className="text-[10px] font-bold text-blue-400 uppercase tracking-widest">Manager OS</span>
+                            <span className="font-black text-lg text-white tracking-tight block leading-none">PlayCell App</span>
+                            <span className="text-[10px] font-bold text-blue-400 uppercase tracking-widest">Gestão Técnica</span>
                         </div>
                     </div>
                     <button onClick={() => setIsMobileMenuOpen(false)} className="md:hidden text-slate-400 hover:text-white p-1">
@@ -1800,7 +1800,7 @@ function OrdersTab({ orders, setOrders, usersList, currentUser, saveDocCloud, de
                                 <div>
                                     <div className="flex items-center space-x-2">
                                         <div className="bg-blue-600 text-white p-1.5 rounded-lg font-bold"><Wrench className="w-5 h-5" /></div>
-                                        <h2 className="text-xl font-black text-slate-900 tracking-tight">PlayCell Manager</h2>
+                                        <h2 className="text-xl font-black text-slate-900 tracking-tight">PlayCell App</h2>
                                     </div>
                                     <p className="text-xs text-slate-500 mt-1">Assistência Técnica Especializada</p>
                                 </div>
